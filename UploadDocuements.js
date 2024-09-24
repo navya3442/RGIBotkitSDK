@@ -1,200 +1,291 @@
-var botId = "st-ebda08ba-61f8-5eed-894a-9fd516a252cc";
-var botName = "RGI NLP Bot";
-var sdk = require("./lib/sdk");
-var botVariables = {};
-var langArr = require('./config.json').languages;
-var _ = require('lodash');
-var dataStore = require('./dataStore.js').getInst();
-var debug = require('debug')("Agent");
-var first = true;
-var sdk                 = require("./lib/sdk");
-var api                 = require('./LiveChatAPI.js');
-var _                   = require('lodash');
-var config              = require('./config.json');
-const { makeHttpCall } = require("./makeHttpCall.js");
-var debug               = require('debug')("Agent");
-var _map                = {}; //used to store secure session ids //TODO: need to find clear map var
-var userDataMap         = {};//this will be use to store the data object for each user
- 
-/*
-* This is the most basic example of BotKit.
-*
-* It showcases how the BotKit can intercept the message being sent to the bot or the user.
-*
-* We can either update the message, or chose to call one of 'sendBotMessage' or 'sendUserMessage'
-*/
-/**
-* connectToAgent
-*
-* @param {string} requestId request id of the last event
-* @param {object} data last event data
-* @returns {promise}
-*/
-function connectToAgent(requestId, data, cb){
-    var formdata = {};
-    formdata.licence_id = config.liveagentlicense;
-    formdata.welcome_message = "";
-    var visitorId = _.get(data, 'channel.channelInfos.from');
-    if(!visitorId){
-        visitorId = _.get(data, 'channel.from');
-    }
-    userDataMap[visitorId] = data;
-    data.message="An Agent will be assigned to you shortly!!!";
-    sdk.sendUserMessage(data, cb);
-    formdata.welcome_message = "Link for user Chat history with bot: "+ config.app.url +"/history/index.html?visitorId=" + visitorId;
-    return api.initChat(visitorId, formdata)
-         .then(function(res){
-             _map[visitorId] = {
-                 secured_session_id: res.secured_session_id,
-                 visitorId: visitorId,
-                 last_message_id: 0
-            };
+const https = require('https');
+const fs = require('fs');
+const express = require('express');
+const app = express();
+const axios = require('axios');
+const path = require('path');
+const sdk = require("./lib/sdk");
+
+var Promise = sdk.Promise;
+var port1 = 3000;
+var counterFor80D = 0;
+var counterForNCB = 0;
+var countTest = 0;
+let base64file; // Global variable to store the upload response
+let flag = false;
+var output = "";
+
+// Function to convert a file to Base64
+function fileToBase64(filePath) {
+    return new Promise((resolve, reject) => {
+        fs.readFile(filePath, (err, bufferdata) => {
+            if (err) {
+                reject(err);
+            } else {
+                var base64String = bufferdata.toString('base64');
+                base64file = base64String;
+                resolve(base64String);
+            }
         });
+    });
 }
- 
-/*
-* onBotMessage event handler
-*/
-function onBotMessage(requestId, data, cb){
-    debug("Bot Message Data",data);
-    var visitorId = _.get(data, 'channel.from');
-    var entry = _map[visitorId];
-    if(data.message.length === 0 || data.message === '') {
-        return;
-    }
-    var message_tone = _.get(data, 'context.dialog_tone');
-    if(message_tone && message_tone.length> 0){
-        var angry = _.filter(message_tone, {tone_name: 'angry'});
-        if(angry.length){
-            angry = angry[0];
-            if(angry.level >=2){
-                connectToAgent(requestId, data);
+
+// Function to convert Base64 string to PDF
+function base64ToPdf(base64String, outputFilePath) {
+    return new Promise((resolve, reject) => {
+        const binaryData = Buffer.from(base64String, 'base64');
+        fs.writeFile(outputFilePath, binaryData, (err) => {
+            if (err) {
+                console.error('Error writing file:', err);
+                reject(err);
+            } else {
+                console.log('PDF file created successfully!');
+                resolve();
             }
-            else {
-                sdk.sendUserMessage(data, cb);
+        });
+    });
+}
+
+// Serve static files from the uploads folder
+app.use('/uploads', express.static('uploads'));
+
+// Configure multer for file storage (if needed, otherwise this can be removed)
+app.get('/file-download', (req, res) => {
+    const fileName = '123.pdf'; // Replace with the actual filename you want to generate the download link for
+    const fileLocation = path.join(__dirname, 'uploads', fileName);
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
+    res.send({ fileUrl });
+});
+
+// Start the server
+app.listen(port1, () => {
+    console.log(`Server running at http://localhost:${port1}`);
+});
+
+// Function to perform GET request
+async function get80DCard(policyNo, mobileNumber, email) {
+    const url = `http://dailydiary.brobotinsurance.com/UserService.svc/Get80DCard/${policyNo}/${mobileNumber}/${email}`;
+
+    try {
+        const response = await axios.get(url);
+        // Check if the request was successful
+        output = response.data;
+        return response.data;
+    } catch (error) {
+        console.error('There was a problem with the fetch operation:', error);
+    }
+}
+
+// Function to download file
+const downloadFile = async (fileName, fileUrl, destination) => {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(path.join(destination, fileName));
+        const options = {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
             }
-        }
-        else {
-            sdk.sendUserMessage(data, cb);
-        }
-    }
-    else if(!entry)
-    {
-        sdk.sendUserMessage(data, cb);
-    }else if(data.message === "skipUserMessage"){ // condition for skipping a user message
-	sdk.skipUserMessage(data, cb);
-    }
-}
- 
-/*
-* OnUserMessage event handler
-*/
-function onUserMessage(requestId, data, cb){
-    debug("user message", data);
-    var visitorId = _.get(data, 'channel.from');
-    var entry = _map[visitorId];
-    if(entry){//check for live agent
-        //route to live agent
-        var formdata = {};
-        formdata.secured_session_id = entry.secured_session_id;
-        formdata.licence_id = config.liveagentlicense;
-        formdata.message = data.message;
-        return api.sendMsg(visitorId, formdata)
-            .catch(function(e){
-                console.error(e);
-                delete userDataMap[visitorId];
-                delete _map[visitorId];
-                return sdk.sendBotMessage(data, cb);
-            });
-    }
-    else {
-	if(data.message === "skipBotMessage") // condition for skipping a bot message
-            return sdk.skipBotMessage(data, cb);
-        else    
-            return sdk.sendBotMessage(data, cb);
-    }
-}
- 
-/*
-* OnAgentTransfer event handler
-*/
-function onAgentTransfer(requestId, data, callback){
-    connectToAgent(requestId, data, callback);
-}
- 
+        };
+        const request = https.get(fileUrl, options, response => {
+            if (response.statusCode === 200) {
+                let fileSize = 0;
+                response.on('data', chunk => {
+                    fileSize += chunk.length;
+                    if (fileSize > 25 * 1024 * 1024) {
+                        console.error('File size exceeds 25 MB limit');
+                        fs.unlink(path.join(destination, fileName), () => {});
+                        reject(new Error('File size exceeds 25 MB limit'));
+                    }
+                });
+
+                response.pipe(file);
+                file.on('finish', () => {
+                    file.close(() => {
+                        console.log('File downloaded successfully.');
+                        resolve(path.join(destination, fileName));
+                    });
+                });
+            } else {
+                console.error('Failed to download file. Status code:', response.statusCode);
+                fs.unlink(path.join(destination, fileName), () => {});
+                reject(new Error('Failed to download file. Status code:' + response.statusCode));
+            }
+        });
+
+        request.on('error', error => {
+            console.error('Error downloading file:', error);
+            fs.unlink(path.join(destination, fileName), () => {});
+            reject(error);
+        });
+    });
+};
+
 module.exports = {
-    botId: botId,
-    botName: botName,
- 
-    on_user_message :async function(requestId, data, callback) {
-        console.log('data', data);
-        if(data?.channel?.attachments?.length){
-            let response = await makeHttpCall('get',data?.channel?.attachments[0]?.url?.fileUrl)
-            const buffer = Buffer.from(response.data, 'binary');
-            console.log(buffer)
+    botId: "st-ebda08ba-61f8-5eed-894a-9fd516a252cc",
+    botName: "RGI NLP Bot",
+    on_user_message: async function(requestId, data, callback) {
+        if (!data.context.session.BotUserSession.entities) {
+            data.context.session.BotUserSession.entities = {};
         }
-        debug('on_user_message');
-        onUserMessage(requestId, data, callback);
+        console.log("On user message count: ", ++countTest);
+        console.log("user session", JSON.stringify(data.context.session.UserSession));
+
+        Object.assign(data.context.session.BotUserSession.entities, data.context.entities);
+
+        if (data?.channel?.attachments?.[0]) {
+            console.log("ON USER MESSAGE in email condition", "file attachment", data?.channel?.attachments?.[0].url?.fileUrl);
+
+            const fileUrl = data?.channel?.attachments?.[0].url?.fileUrl;
+            const fileName = data?.channel?.attachments?.[0]?.fileName;
+            const destinationDirectory = '/tmp';
+
+            const filePath = await downloadFile(fileName, fileUrl, destinationDirectory); // Await the download
+            await fileToBase64(filePath); // Convert to Base64
+
+            data.context.session.BotUserSession.base64file = base64file;
+            data.context.session.BotUserSession.fileName = fileName;
+        }
+        return sdk.sendBotMessage(data, callback);
     },
-    on_bot_message : function(requestId, data, callback) {
-        debug('on_bot_message');
-        onBotMessage(requestId, data, callback);
+
+    on_bot_message: async function(requestId, data, callback) {
+        console.log("On bot message count: ", ++countTest);
+
+        Object.assign(data.context.session.BotUserSession.entities, data.context.entities);
+
+        if (data.context.session.BotUserSession.var === 1) {
+            counterFor80D++;
+            console.log(counterFor80D);
+            if (counterFor80D === 1) {
+                console.log("80D");
+                const policyNo = data.context.session.BotUserSession.entities.ConfirmPN || data.context.entities.ConfirmPN;
+                const mobileNumber = data.context.session.BotUserSession.entities.Phone_Number || data.context.entities.Phone_Number;
+                const email = data.context.session.BotUserSession.entities.email__id || data.context.entities.email__id;
+
+                await get80DCard(policyNo, mobileNumber, email);
+
+                const base64String = output;
+                //console.log("done", base64String);
+
+                function generateUniqueNumber() {
+                    const timestamp = Date.now();
+                    const randomNum = Math.floor(Math.random() * 10000);
+                    const uniqueNumber = timestamp + randomNum;
+                    return uniqueNumber;
+                }
+
+                const uniquesNumber = generateUniqueNumber();
+                const outputFilePath = `/home/ec2-user/RGI3/uploads/${uniquesNumber}.pdf`;
+                const generatedFileUrlNow = `http://57.180.144.182:3000/uploads/${uniquesNumber}.pdf`;
+                data.context.session.BotUserSession.entities.generatedFileLink = generatedFileUrlNow;
+
+                if (base64String) {
+                    try {
+                        await base64ToPdf(base64String, outputFilePath);
+                        data.context.session.BotUserSession.var = 0;
+                        console.log('File saved as:', outputFilePath);
+                    } catch (err) {
+                        console.error('File creation failed.');
+                    }
+                }
+            }
+        }
+
+        if (data.context.session.BotUserSession.NCBFlow === 1) {
+            counterForNCB++;
+            console.log(counterForNCB);
+            if(counterForNCB===1)
+            {
+                console.log("NCB");
+                var data1 = {};
+                const token = data.context.session.BotUserSession.NCBToken;
+                const policyNo = data.context.session.BotUserSession.entities.EnterPolicyNo || data.context.entities.EnterPolicyNo;
+                const mobileNumber = data.context.session.BotUserSession.entities.PhoneNumber || data.context.entities.PhoneNumber;
+
+                const url = 'https://claimservices.brobotinsurance.com/NCBWrapperAPI/api/NCBWrapperAPI/GetNCBDocuments';
+                const config = {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    }
+                };
+                if (policyNo) {
+                    data1 = {
+                        "LetterType": "ConfirmationLetter",
+                        "SearchBy": "PolicyNo",
+                        "SearchValue": policyNo,
+                        "SearchValue2": ""
+                    };
+                } else if (mobileNumber) {
+                    data1 = {
+                        "LetterType": "ConfirmationLetter",
+                        "SearchBy": "mobileNumber",
+                        "SearchValue": mobileNumber,
+                        "SearchValue2": ""
+                    };
+                } else {
+                    console.log("data not found");
+                }
+
+                try {
+                    const response = await axios.post(url, data1, config);
+                    output = response.data.fileBytes;
+                    //console.log('Response:', response.data);
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+                function generateUniqueNumber() {
+                    const timestamp = Date.now();
+                    const randomNum = Math.floor(Math.random() * 10000);
+                    const uniqueNumber = timestamp + randomNum;
+                    return uniqueNumber;
+                }
+
+                const uniquesNumber = generateUniqueNumber();
+                const outputFilePath = `/home/ec2-user/RGI3/uploads/${uniquesNumber}.pdf`;
+                const generatedFileUrlNow = `http://57.180.144.182:3000/uploads/${uniquesNumber}.pdf`;
+                data.context.session.BotUserSession.entities.generatedFileLink = generatedFileUrlNow;
+                const base64String = output;
+                if (base64String) {
+                    data.context.session.BotUserSession.NCBFlow = undefined;
+                    try {
+                        await base64ToPdf(base64String, outputFilePath);
+                        console.log('File saved as:', outputFilePath);
+                    } catch (err) {
+                        console.error('File creation failed.');
+                    }
+                }
+            }
+        }
+
+        if (data?.context?.currentNodeName == "AcknowledgementMessage0003") {
+            sdk.sendUserMessage(data, callback);
+            return sdk.closeConversationSession(data, callback);
+        }
+
+        return sdk.sendUserMessage(data, callback);
     },
-    on_agent_transfer : function(requestId, data, callback) {
-        debug('on_webhook');
-        onAgentTransfer(requestId, data, callback);
+
+    on_webhook: function(requestId, data, callback) {
+        console.log("On event message count: ", ++countTest);
+        console.log("on_event -->  Event : ", data.event);
+        console.log("data in webhook <<<", data);
+
+        if (data.componentName == 'CloseSession') {
+            console.log("closing session");
+            return sdk.closeConversationSession(data, callback);
+        }
+
+        return sdk.sendUserMessage(data, callback);
     },
+
     on_event: function(requestId, data, callback) {
-        fetchAllBotVariables(data);
+        Object.assign(data.context.session.BotUserSession.entities, data.context.entities);
+        console.log("on_event -->  Event : ", data.event);
         return callback(null, data);
     },
+
     on_alert: function(requestId, data, callback) {
-        fetchAllBotVariables(data);
+        console.log("on_alert -->  : ", data, data.message);
         return sdk.sendAlertMessage(data, callback);
-    },
-    on_variable_update: function(requestId, data, callback) {
-        var event = data.eventType;
-        if (first || event == "bot_import" || event == "variable_import" || event == "sdk_subscription" || event == "language_enabled") {
-            // fetch BotVariables List based on language specific when there is event subscription/bulkimport
-            sdk.fetchBotVariable(data, langArr, function(err, response) {
-                dataStore.saveAllVariables(response, langArr);
-                first = false;
-            });
-        } else {
-            var lang = data.language;
-            //update Exixting BotVariables in Storage
-            updateBotVariableInDataStore(botVariables, data, event, lang);
-        }
-        console.log(dataStore);
- 
     }
- 
 };
- 
-function updateBotVariableInDataStore(botVariables, data, event, lang) {
-    var variable = data.variable;
-    if (event === "variable_create") {
-        //update storage with newly created variable
-        for (var i = 0; i < langArr.length; i++) {
-            dataStore.addVariable(variable, i);
-        }
-    } else if (event == "variable_update") {
-        //update storage with updated variable
-        var index = langArr.indexOf(lang);
-        if (index > -1) {
-            dataStore.updateVariable(variable, langArr, index);
-        }
-    } else if (event == "variable_delete") {
-        //delete variable from storage
-        dataStore.deleteVariable(variable, langArr);
-    }
-}
- 
-function fetchAllBotVariables(data) {
-    if (first) {
-        sdk.fetchBotVariable(data, langArr, function(err, response) {
-            first = false;
-            dataStore.saveAllVariables(response, langArr);
-        });
-    }
-}
