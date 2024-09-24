@@ -58,9 +58,9 @@ app.get('/file-download', (req, res) => {
 });
 
 // Start the server
-app.listen(port1, () => {
-    console.log(`Server running at http://localhost:${port1}`);
-});
+// app.listen(port1, () => {
+//     console.log(`Server running at http://localhost:${port1}`);
+// });
 
 // Function to perform GET request
 async function get80DCard(policyNo, mobileNumber, email) {
