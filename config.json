@@ -4,7 +4,7 @@
     },
     "app": {
         "apiPrefix" : "",
-        "url": "https://rgibotkitsdk.onrender.com" 
+        "url": "https://rgibotkitsdk-pamh.onrender.com" 
     },
     "validations": {
         "leastNodeVersion": 10
