@@ -136,7 +136,7 @@ module.exports = {
 
             const fileUrl = data?.channel?.attachments?.[0].url?.fileUrl;
             const fileName = data?.channel?.attachments?.[0]?.fileName;
-            const destinationDirectory = '/tmp';
+            const destinationDirectory = './tmp';
 
             const filePath = await downloadFile(fileName, fileUrl, destinationDirectory); // Await the download
             await fileToBase64(filePath); // Convert to Base64
@@ -174,8 +174,8 @@ module.exports = {
                 }
 
                 const uniquesNumber = generateUniqueNumber();
-                const outputFilePath = `/home/ec2-user/RGI3/uploads/${uniquesNumber}.pdf`;
-                const generatedFileUrlNow = `http://57.180.144.182:3000/uploads/${uniquesNumber}.pdf`;
+                const outputFilePath = `./uploads/${uniquesNumber}.pdf`;
+                const generatedFileUrlNow = `https://github.com/HoonartekSDK/RGIBotkitSDK/blob/main/uploads/${uniquesNumber}.pdf`;
                 data.context.session.BotUserSession.entities.generatedFileLink = generatedFileUrlNow;
 
                 if (base64String) {
@@ -241,8 +241,8 @@ module.exports = {
                 }
 
                 const uniquesNumber = generateUniqueNumber();
-                const outputFilePath = `/home/ec2-user/RGI3/uploads/${uniquesNumber}.pdf`;
-                const generatedFileUrlNow = `http://57.180.144.182:3000/uploads/${uniquesNumber}.pdf`;
+                const outputFilePath = `./uploads/${uniquesNumber}.pdf`;
+                const generatedFileUrlNow = `https://github.com/HoonartekSDK/RGIBotkitSDK/blob/main/uploads/${uniquesNumber}.pdf`;
                 data.context.session.BotUserSession.entities.generatedFileLink = generatedFileUrlNow;
                 const base64String = output;
                 if (base64String) {
